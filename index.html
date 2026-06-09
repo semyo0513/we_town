@@ -1,0 +1,1196 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D 타운 탐험기 · 창순기획</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
+  <!-- Three.js r128 CDN (OrbitControls 미사용으로 버전 호환 문제 없음) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    /* ── 리셋 & 기본 ─────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:        #0c0f1a;
+      --surface:   #141927;
+      --border:    rgba(255,255,255,.08);
+      --primary:   #10b981;
+      --primary-d: #059669;
+      --gold:      #f59e0b;
+      --danger:    #ef4444;
+      --text:      #f1f5f9;
+      --muted:     #94a3b8;
+      --radius:    12px;
+      --font:      'Noto Sans KR', sans-serif;
+    }
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── 유틸리티 ────────────────────────────────── */
+    .hidden { display: none !important; }
+
+    button {
+      cursor: pointer;
+      font-family: var(--font);
+      border: none;
+      border-radius: 8px;
+      font-weight: 700;
+      transition: opacity .15s, transform .1s;
+    }
+    button:active { transform: scale(.97); }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+
+    .btn-primary  { background: var(--primary); color: #fff; padding: 10px 18px; }
+    .btn-primary:hover:not(:disabled)  { background: var(--primary-d); }
+    .btn-secondary { background: rgba(255,255,255,.07); color: var(--text); border: 1px solid var(--border); padding: 8px 14px; }
+    .btn-secondary:hover:not(:disabled) { background: rgba(255,255,255,.12); }
+    .btn-danger   { background: var(--danger); color: #fff; padding: 8px 14px; }
+    .btn-gold     { background: var(--gold); color: #0c0f1a; padding: 8px 14px; }
+    .btn-sm       { padding: 6px 12px; font-size: 13px; }
+    .btn-block    { width: 100%; }
+
+    input, textarea, select {
+      width: 100%;
+      background: rgba(0,0,0,.3);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      padding: 9px 12px;
+      font-family: var(--font);
+      font-size: 14px;
+      outline: none;
+      transition: border-color .2s;
+    }
+    input:focus, textarea:focus, select:focus { border-color: var(--primary); }
+    label { display: block; font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 5px; }
+    .form-group { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+
+    /* ── 로그인 오버레이 ─────────────────────────── */
+    #login-overlay {
+      position: fixed; inset: 0; z-index: 100;
+      background: radial-gradient(ellipse at 50% 60%, #0d2a1e 0%, #0c0f1a 70%);
+      display: flex; align-items: center; justify-content: center;
+      transition: opacity .4s;
+    }
+    .login-box {
+      width: 380px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 36px 32px;
+      box-shadow: 0 30px 80px rgba(0,0,0,.6);
+    }
+    .login-logo {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    .login-logo .icon { font-size: 40px; }
+    .login-logo h1 { font-size: 20px; font-weight: 900; margin-top: 8px; }
+    .login-logo p  { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .login-tabs {
+      display: flex; gap: 4px;
+      background: rgba(0,0,0,.3);
+      border-radius: 10px;
+      padding: 4px;
+      margin-bottom: 20px;
+    }
+    .login-tab {
+      flex: 1; padding: 8px 0;
+      background: transparent; color: var(--muted);
+      border-radius: 7px; font-size: 13px;
+    }
+    .login-tab.active { background: var(--primary); color: #fff; }
+    .hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .badge-creator {
+      display: inline-block;
+      background: rgba(16,185,129,.15);
+      border: 1px solid rgba(16,185,129,.3);
+      color: var(--primary);
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 99px;
+      font-weight: 700;
+    }
+
+    /* ── 앱 레이아웃 ─────────────────────────────── */
+    #app {
+      display: flex; flex-direction: column; height: 100dvh; overflow: hidden;
+    }
+    header {
+      flex-shrink: 0;
+      background: rgba(20,25,39,.95);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 12px;
+      padding: 8px 16px;
+      flex-wrap: wrap;
+    }
+    .logo-mark { font-size: 20px; }
+    .app-title { font-size: 15px; font-weight: 900; white-space: nowrap; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: rgba(255,255,255,.05);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 4px 10px; font-size: 12px;
+    }
+    .chip strong { color: var(--gold); }
+    .hud-gap { flex: 1; }
+    .header-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+
+    .game-area {
+      flex: 1; display: flex; overflow: hidden;
+    }
+
+    /* Three.js 캔버스 컨테이너 */
+    #canvas-wrap {
+      flex: 1; position: relative; overflow: hidden;
+    }
+    #canvas-wrap canvas {
+      display: block; width: 100% !important; height: 100% !important;
+    }
+
+    /* ── HUD 오버레이 (캔버스 위) ────────────────── */
+    #hud {
+      position: absolute; inset: 0; pointer-events: none;
+    }
+
+    /* 조작 안내 */
+    .controls-hint {
+      position: absolute; bottom: 16px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,.65);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 6px 16px;
+      font-size: 11px; color: var(--muted);
+      white-space: nowrap;
+      pointer-events: none;
+    }
+
+    /* NPC 상호작용 프롬프트 */
+    #interact-prompt {
+      position: absolute; bottom: 56px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(16,185,129,.18);
+      border: 1px solid var(--primary);
+      color: var(--primary);
+      border-radius: 10px;
+      padding: 6px 18px; font-size: 13px; font-weight: 700;
+      pointer-events: none;
+      display: none;
+    }
+
+    /* ── 사이드바 ─────────────────────────────────── */
+    #sidebar {
+      width: 280px; flex-shrink: 0;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    .sidebar-section {
+      padding: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .sidebar-section h3 {
+      font-size: 12px; font-weight: 700;
+      color: var(--muted); text-transform: uppercase;
+      letter-spacing: .06em; margin-bottom: 10px;
+    }
+    #npc-list {
+      flex: 1; overflow-y: auto; padding: 10px;
+    }
+    .npc-card {
+      background: rgba(0,0,0,.25);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: border-color .2s;
+      display: flex; align-items: center; gap: 10px;
+    }
+    .npc-card:hover { border-color: var(--primary); }
+    .npc-dot {
+      width: 32px; height: 32px; border-radius: 50%;
+      flex-shrink: 0;
+      border: 2px solid rgba(255,255,255,.15);
+    }
+    .npc-info { flex: 1; min-width: 0; }
+    .npc-name { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .npc-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .npc-del  { background: transparent; border: none; color: var(--muted); font-size: 16px; flex-shrink: 0; }
+    .npc-del:hover { color: var(--danger); }
+    #npc-empty { font-size: 13px; color: var(--muted); text-align: center; padding: 20px 0; }
+
+    /* ── 모달 공통 ────────────────────────────────── */
+    .modal-bg {
+      position: fixed; inset: 0; z-index: 50;
+      background: rgba(0,0,0,.7);
+      backdrop-filter: blur(6px);
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      width: 100%; max-width: 440px;
+      max-height: 90dvh; overflow-y: auto;
+      padding: 28px;
+    }
+    .modal-hd {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .modal-hd h2 { font-size: 16px; font-weight: 900; }
+    .close-btn {
+      background: rgba(255,255,255,.06);
+      border: 1px solid var(--border);
+      border-radius: 8px; width: 32px; height: 32px;
+      font-size: 18px; color: var(--muted);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .close-btn:hover { color: var(--text); background: rgba(255,255,255,.1); }
+    .gold-reward { color: var(--gold); font-size: 12px; font-weight: 700; }
+
+    /* ── NPC 등록 모달 ───────────────────────────── */
+    .color-row {
+      display: flex; gap: 10px;
+    }
+    .color-row .form-group { flex: 1; }
+    input[type=color] {
+      height: 38px; padding: 2px 4px; cursor: pointer;
+    }
+
+    /* ── 대화 모달 ────────────────────────────────── */
+    #dialog-modal .modal { max-width: 380px; }
+    .dialog-npc-head {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 16px;
+    }
+    .dialog-face {
+      width: 48px; height: 48px; border-radius: 50%;
+      border: 2px solid rgba(255,255,255,.15);
+      flex-shrink: 0;
+    }
+    .dialog-npc-name { font-size: 15px; font-weight: 900; }
+    .dialog-text {
+      font-size: 14px; line-height: 1.7;
+      color: var(--text);
+      min-height: 60px;
+      background: rgba(0,0,0,.25);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 16px;
+    }
+    .reward-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: rgba(245,158,11,.12);
+      border: 1px solid rgba(245,158,11,.3);
+      color: var(--gold);
+      border-radius: 8px; padding: 4px 12px;
+      font-size: 13px; font-weight: 700;
+      margin-bottom: 14px;
+    }
+
+    /* ── 토스트 알림 ─────────────────────────────── */
+    #toast {
+      position: fixed; bottom: 80px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(12,15,26,.95);
+      border: 1px solid var(--primary);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 10px 22px;
+      font-size: 13px; font-weight: 700;
+      z-index: 200; pointer-events: none;
+      opacity: 0; transition: opacity .25s;
+      white-space: nowrap;
+    }
+    #toast.show { opacity: 1; }
+
+    /* ── 모바일 터치 조이스틱 ────────────────────── */
+    #mobile-pad {
+      position: absolute; bottom: 80px; left: 20px;
+      pointer-events: all;
+      display: none;
+    }
+    #joystick-base {
+      width: 90px; height: 90px;
+      background: rgba(255,255,255,.08);
+      border: 2px solid rgba(255,255,255,.2);
+      border-radius: 50%;
+      position: relative;
+    }
+    #joystick-thumb {
+      position: absolute;
+      width: 36px; height: 36px;
+      background: rgba(16,185,129,.6);
+      border-radius: 50%;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    #mobile-talk {
+      position: absolute; bottom: 80px; right: 20px;
+      width: 64px; height: 64px;
+      background: rgba(16,185,129,.3);
+      border: 2px solid var(--primary);
+      border-radius: 50%;
+      font-size: 24px;
+      display: none;
+      align-items: center; justify-content: center;
+      pointer-events: all;
+    }
+
+    @media (max-width: 768px) {
+      #sidebar { display: none; }
+      #mobile-pad, #mobile-talk { display: flex; }
+      .header-btns .btn-secondary:not(#btn-npc-modal):not(#btn-logout) { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ───────────────────────────────────────────────────── -->
+<!-- 로그인 오버레이                                        -->
+<!-- ───────────────────────────────────────────────────── -->
+<div id="login-overlay">
+  <div class="login-box">
+    <div class="login-logo">
+      <div class="icon">🌳</div>
+      <h1>3D 타운 탐험기</h1>
+      <p>인물을 등록하고 골드를 모아보세요</p>
+    </div>
+    <div class="login-tabs">
+      <button class="login-tab active" id="tab-login">로그인</button>
+      <button class="login-tab" id="tab-register">회원가입</button>
+    </div>
+
+    <!-- 로그인 폼 -->
+    <div id="form-login">
+      <div class="form-group">
+        <label>아이디</label>
+        <input type="text" id="in-login-id" placeholder="아이디 입력" maxlength="12" autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label>비밀번호</label>
+        <input type="password" id="in-login-pw" placeholder="비밀번호 입력" autocomplete="current-password">
+      </div>
+      <div id="login-msg" style="font-size:12px;color:var(--danger);min-height:18px;margin-bottom:10px;"></div>
+      <button class="btn-primary btn-block" id="btn-login">마을 입장 🚶</button>
+    </div>
+
+    <!-- 회원가입 폼 -->
+    <div id="form-register" class="hidden">
+      <div class="form-group">
+        <label>아이디</label>
+        <input type="text" id="in-reg-id" placeholder="영문+숫자 조합 (최대 12자)" maxlength="12" autocomplete="username">
+        <div class="hint">교사 계정은 <strong>teacher-</strong>로 시작해주세요</div>
+      </div>
+      <div class="form-group">
+        <label>비밀번호</label>
+        <input type="password" id="in-reg-pw" placeholder="비밀번호 설정" autocomplete="new-password">
+      </div>
+      <div id="reg-msg" style="font-size:12px;color:var(--danger);min-height:18px;margin-bottom:10px;"></div>
+      <button class="btn-primary btn-block" id="btn-register">가입 완료 ✅</button>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────────────────────────────────────────────── -->
+<!-- 메인 앱                                                -->
+<!-- ───────────────────────────────────────────────────── -->
+<div id="app" class="hidden">
+
+  <!-- 헤더 HUD -->
+  <header>
+    <span class="logo-mark">🌲</span>
+    <span class="app-title">3D 타운 탐험기</span>
+    <div class="chip">👤 <strong id="hud-user">-</strong></div>
+    <div class="chip">💰 <strong id="hud-gold">0</strong>G</div>
+    <div class="hud-gap"></div>
+    <div class="header-btns">
+      <button class="btn-secondary btn-sm" id="btn-npc-modal">➕ 인물 등록</button>
+      <button class="btn-secondary btn-sm" id="btn-refresh-npcs">🔄 새로고침</button>
+      <button class="btn-danger btn-sm" id="btn-logout">🚪 나가기</button>
+    </div>
+  </header>
+
+  <!-- 게임 영역 -->
+  <div class="game-area">
+
+    <!-- Three.js 캔버스 -->
+    <div id="canvas-wrap">
+      <div id="hud">
+        <div id="interact-prompt">Space 키를 눌러 대화하기</div>
+        <div class="controls-hint">WASD / 방향키 이동 &nbsp;|&nbsp; Space 대화</div>
+      </div>
+
+      <!-- 모바일 -->
+      <div id="mobile-pad">
+        <div id="joystick-base"><div id="joystick-thumb"></div></div>
+      </div>
+      <button id="mobile-talk">💬</button>
+    </div>
+
+    <!-- 사이드바 -->
+    <div id="sidebar">
+      <div class="sidebar-section">
+        <h3>🏘 동네 인물 목록</h3>
+        <button class="btn-primary btn-sm btn-block" id="btn-npc-modal-2">➕ 인물 등록</button>
+      </div>
+      <div id="npc-list">
+        <div id="npc-empty">등록된 인물이 없습니다.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────────────────────────────────────────────── -->
+<!-- NPC 등록 모달                                          -->
+<!-- ───────────────────────────────────────────────────── -->
+<div class="modal-bg hidden" id="npc-modal-bg">
+  <div class="modal">
+    <div class="modal-hd">
+      <h2>인물(NPC) 등록 <span class="gold-reward">완료 시 골드 지급</span></h2>
+      <button class="close-btn" id="btn-close-npc">&times;</button>
+    </div>
+
+    <div class="form-group">
+      <label>이름</label>
+      <input type="text" id="npc-name" placeholder="예: 붕어빵 사장님" maxlength="12">
+    </div>
+    <div class="form-group">
+      <label>한 줄 소개</label>
+      <input type="text" id="npc-role" placeholder="예: 동네 최고의 간식 요리사" maxlength="20">
+    </div>
+
+    <div class="color-row">
+      <div class="form-group">
+        <label>얼굴 색상</label>
+        <input type="color" id="npc-face" value="#ffb347">
+      </div>
+      <div class="form-group">
+        <label>복장 색상</label>
+        <input type="color" id="npc-outfit" value="#3b82f6">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>대화 대사 (줄바꿈으로 구분 · 줄 많을수록 골드↑)</label>
+      <textarea id="npc-dialogues" rows="4" placeholder="안녕! 나는 이 동네에서 제일 맛있는 붕어빵을 팔고 있어.
+오늘도 황금빛 붕어빵을 맛봐!"></textarea>
+    </div>
+
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;">
+      📍 NPC는 현재 플레이어 위치 근처에 자동 배치됩니다.
+    </div>
+
+    <div id="npc-form-msg" style="font-size:12px;color:var(--danger);min-height:18px;margin-bottom:10px;"></div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn-secondary" id="btn-cancel-npc" style="flex:1">취소</button>
+      <button class="btn-primary" id="btn-submit-npc" style="flex:2">등록 완료 ✅</button>
+    </div>
+  </div>
+</div>
+
+<!-- ───────────────────────────────────────────────────── -->
+<!-- 대화 모달                                              -->
+<!-- ───────────────────────────────────────────────────── -->
+<div class="modal-bg hidden" id="dialog-modal">
+  <div class="modal" style="max-width:380px;">
+    <div class="dialog-npc-head">
+      <div class="dialog-face" id="dlg-face"></div>
+      <div>
+        <div class="dialog-npc-name" id="dlg-name">-</div>
+        <div style="font-size:12px;color:var(--muted)" id="dlg-role">-</div>
+      </div>
+    </div>
+    <div class="dialog-text" id="dlg-text">...</div>
+    <div class="reward-badge" id="dlg-reward" style="display:none">💰 +<span id="dlg-reward-amt">0</span>G 획득!</div>
+    <button class="btn-primary btn-block" id="btn-close-dialog">닫기</button>
+  </div>
+</div>
+
+<!-- 토스트 -->
+<div id="toast"></div>
+
+<!-- ───────────────────────────────────────────────────── -->
+<!-- JavaScript                                            -->
+<!-- ───────────────────────────────────────────────────── -->
+<script>
+// ================================================================
+// 0. 설정
+// ================================================================
+const API_URL = 'https://script.google.com/macros/s/여기에_GAS_URL_붙여넣기/exec';
+
+// ================================================================
+// 1. API 통신
+// ================================================================
+async function apiCall(action, data = {}) {
+  const body = new URLSearchParams({
+    action,
+    data: JSON.stringify(data)
+  });
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body
+  });
+  const json = await res.json();
+  if (!json.success) throw new Error(json.error || '서버 오류');
+  return json.data;
+}
+
+// ================================================================
+// 2. 세션
+// ================================================================
+let currentUser = null; // { userId, gold }
+
+function setGold(g) {
+  currentUser.gold = g;
+  document.getElementById('hud-gold').textContent = g;
+}
+
+// ================================================================
+// 3. 토스트
+// ================================================================
+let _toastTimer = null;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), 2400);
+}
+
+// ================================================================
+// 4. Three.js 3D 월드
+// ================================================================
+
+let renderer, scene, camera;
+let playerMesh;
+let npcMeshMap = {};      // npcId → THREE.Group
+let npcDataMap = {};      // npcId → data object
+let nearbyNpcId = null;
+let isDialogOpen = false;
+
+// 키 입력 상태
+const keys = { w: false, a: false, s: false, d: false,
+               ArrowUp: false, ArrowLeft: false, ArrowDown: false, ArrowRight: false };
+
+const GROUND_HALF = 100; // 지면 반크기
+const PLAYER_SPEED = 0.15;
+const NPC_INTERACT_DIST = 3.0;
+const CLOCK = new THREE.Clock();
+
+function initThreeJS() {
+  const wrap = document.getElementById('canvas-wrap');
+
+  // 렌더러
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+  wrap.insertBefore(renderer.domElement, wrap.firstChild);
+
+  // 씬
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x87ceeb);
+  scene.fog = new THREE.Fog(0x87ceeb, 30, 90);
+
+  // 조명
+  const ambient = new THREE.AmbientLight(0xffffff, 0.55);
+  scene.add(ambient);
+  const sun = new THREE.DirectionalLight(0xfff4e0, 1.1);
+  sun.position.set(30, 50, 20);
+  sun.castShadow = true;
+  scene.add(sun);
+
+  // 카메라 (3인칭)
+  camera = new THREE.PerspectiveCamera(60, wrap.clientWidth / wrap.clientHeight, 0.1, 200);
+
+  // 지면
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(GROUND_HALF * 2, GROUND_HALF * 2),
+    new THREE.MeshLambertMaterial({ color: 0x5a9e3e })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  // 격자 길 (중앙 십자)
+  addRoad( 0, GROUND_HALF, 4, true);   // 남북 길
+  addRoad( GROUND_HALF, 0, 4, false);  // 동서 길
+
+  // 장식용 건물·나무 배치
+  addBuilding(-30, -30, 0x4a90d9);
+  addBuilding( 30, -30, 0xe67e22);
+  addBuilding(-30,  30, 0x9b59b6);
+  addBuilding( 30,  30, 0xe74c3c);
+  addBuilding(  0, -50, 0x1abc9c);
+  for (let i = 0; i < 40; i++) {
+    const tx = (Math.random() - 0.5) * 180;
+    const tz = (Math.random() - 0.5) * 180;
+    if (Math.abs(tx) > 12 || Math.abs(tz) > 12) addTree(tx, tz);
+  }
+
+  // 분수대 (중앙)
+  addFountain(0, 0);
+
+  // 플레이어
+  playerMesh = makePlayerMesh(0x10b981, 0x34d399);
+  playerMesh.position.set(0, 1, 10);
+  scene.add(playerMesh);
+
+  // 반응형
+  window.addEventListener('resize', onResize);
+
+  // 애니메이션 루프
+  animate();
+}
+
+/* ── 지형 헬퍼들 ─────────────────────────────────────── */
+
+function addRoad(cx, cz, width, isNS) {
+  const geom = isNS
+    ? new THREE.PlaneGeometry(width, GROUND_HALF * 2)
+    : new THREE.PlaneGeometry(GROUND_HALF * 2, width);
+  const mat  = new THREE.MeshLambertMaterial({ color: 0xb0bec5 });
+  const road = new THREE.Mesh(geom, mat);
+  road.rotation.x = -Math.PI / 2;
+  road.position.set(cx, 0.01, cz);
+  scene.add(road);
+}
+
+function addBuilding(x, z, color) {
+  const w = 8 + Math.random() * 6;
+  const h = 6 + Math.random() * 10;
+  const d = 8 + Math.random() * 6;
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(w, h, d),
+    new THREE.MeshLambertMaterial({ color })
+  );
+  body.position.set(x, h / 2, z);
+  body.castShadow = true;
+  scene.add(body);
+
+  // 지붕
+  const roof = new THREE.Mesh(
+    new THREE.ConeGeometry(Math.max(w, d) * 0.72, 4, 4),
+    new THREE.MeshLambertMaterial({ color: 0x333344 })
+  );
+  roof.position.set(x, h + 2, z);
+  scene.add(roof);
+}
+
+function addTree(x, z) {
+  const trunk = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.25, 0.35, 2, 6),
+    new THREE.MeshLambertMaterial({ color: 0x795548 })
+  );
+  trunk.position.set(x, 1, z);
+  scene.add(trunk);
+
+  const top = new THREE.Mesh(
+    new THREE.SphereGeometry(1.4 + Math.random() * 0.6, 7, 6),
+    new THREE.MeshLambertMaterial({ color: 0x2e7d32 })
+  );
+  top.position.set(x, 3.2, z);
+  scene.add(top);
+}
+
+function addFountain(x, z) {
+  const base = new THREE.Mesh(
+    new THREE.CylinderGeometry(3, 3.2, 0.4, 16),
+    new THREE.MeshLambertMaterial({ color: 0x90a4ae })
+  );
+  base.position.set(x, 0.2, z);
+  scene.add(base);
+
+  const water = new THREE.Mesh(
+    new THREE.CylinderGeometry(2.6, 2.6, 0.15, 16),
+    new THREE.MeshLambertMaterial({ color: 0x29b6f6, transparent: true, opacity: 0.7 })
+  );
+  water.position.set(x, 0.42, z);
+  scene.add(water);
+
+  const pillar = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.15, 0.2, 2.5, 8),
+    new THREE.MeshLambertMaterial({ color: 0x78909c })
+  );
+  pillar.position.set(x, 1.4, z);
+  scene.add(pillar);
+}
+
+/* ── NPC 메시 ────────────────────────────────────────── */
+
+function makePlayerMesh(faceColor, outfitColor) {
+  return makeCharMesh(faceColor, outfitColor);
+}
+
+function makeCharMesh(faceColor, outfitColor) {
+  const g = new THREE.Group();
+
+  // 몸통
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(0.9, 1.0, 0.5),
+    new THREE.MeshLambertMaterial({ color: outfitColor })
+  );
+  body.position.y = 0.5;
+  g.add(body);
+
+  // 머리
+  const head = new THREE.Mesh(
+    new THREE.BoxGeometry(0.7, 0.7, 0.7),
+    new THREE.MeshLambertMaterial({ color: faceColor })
+  );
+  head.position.y = 1.35;
+  g.add(head);
+
+  // 눈 (작은 검정 박스)
+  const eyeGeo = new THREE.BoxGeometry(0.1, 0.1, 0.05);
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+  [-0.15, 0.15].forEach(ex => {
+    const eye = new THREE.Mesh(eyeGeo, eyeMat);
+    eye.position.set(ex, 1.38, 0.36);
+    g.add(eye);
+  });
+
+  g.castShadow = true;
+  return g;
+}
+
+function spawnNPC(npc) {
+  if (npcMeshMap[npc.npcId]) {
+    scene.remove(npcMeshMap[npc.npcId]);
+  }
+  const mesh = makeCharMesh(npc.faceColor, npc.outfitColor);
+  mesh.position.set(npc.posX, 1, npc.posZ);
+  scene.add(mesh);
+  npcMeshMap[npc.npcId] = mesh;
+  npcDataMap[npc.npcId] = npc;
+}
+
+function removeNPCMesh(npcId) {
+  if (npcMeshMap[npcId]) {
+    scene.remove(npcMeshMap[npcId]);
+    delete npcMeshMap[npcId];
+    delete npcDataMap[npcId];
+  }
+}
+
+/* ── 애니메이션 루프 ──────────────────────────────────── */
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = CLOCK.getDelta();
+
+  if (!isDialogOpen) {
+    movePlayer(dt);
+  }
+
+  // 카메라: 플레이어 후방 상단 고정 + lerp
+  const targetCam = new THREE.Vector3(
+    playerMesh.position.x,
+    playerMesh.position.y + 6,
+    playerMesh.position.z + 10
+  );
+  camera.position.lerp(targetCam, 0.08);
+  camera.lookAt(
+    playerMesh.position.x,
+    playerMesh.position.y + 1,
+    playerMesh.position.z
+  );
+
+  // NPC 근접 감지
+  checkNearbyNPC();
+
+  // NPC 부드러운 회전 (플레이어를 바라봄)
+  Object.entries(npcMeshMap).forEach(([id, mesh]) => {
+    const dir = new THREE.Vector3().subVectors(playerMesh.position, mesh.position);
+    dir.y = 0;
+    if (dir.length() > 0.5) {
+      const angle = Math.atan2(dir.x, dir.z);
+      mesh.rotation.y += (angle - mesh.rotation.y) * 0.05;
+    }
+  });
+
+  renderer.render(scene, camera);
+}
+
+function movePlayer(dt) {
+  const speed = PLAYER_SPEED;
+  let dx = 0, dz = 0;
+
+  if (keys.w || keys.ArrowUp)    dz -= 1;
+  if (keys.s || keys.ArrowDown)  dz += 1;
+  if (keys.a || keys.ArrowLeft)  dx -= 1;
+  if (keys.d || keys.ArrowRight) dx += 1;
+
+  if (dx !== 0 && dz !== 0) { dx *= 0.707; dz *= 0.707; }
+
+  const nx = playerMesh.position.x + dx * speed * 60 * dt;
+  const nz = playerMesh.position.z + dz * speed * 60 * dt;
+
+  // 월드 경계
+  playerMesh.position.x = Math.max(-GROUND_HALF + 1, Math.min(GROUND_HALF - 1, nx));
+  playerMesh.position.z = Math.max(-GROUND_HALF + 1, Math.min(GROUND_HALF - 1, nz));
+
+  // 이동 방향으로 회전
+  if (dx !== 0 || dz !== 0) {
+    const angle = Math.atan2(dx, dz);
+    playerMesh.rotation.y += (angle - playerMesh.rotation.y) * 0.15;
+  }
+}
+
+function checkNearbyNPC() {
+  let found = null;
+  let minD  = NPC_INTERACT_DIST;
+  Object.entries(npcMeshMap).forEach(([id, mesh]) => {
+    const d = playerMesh.position.distanceTo(mesh.position);
+    if (d < minD) { minD = d; found = id; }
+  });
+  nearbyNpcId = found;
+  document.getElementById('interact-prompt').style.display = found ? 'block' : 'none';
+}
+
+function onResize() {
+  const wrap = document.getElementById('canvas-wrap');
+  renderer.setSize(wrap.clientWidth, wrap.clientHeight);
+  camera.aspect = wrap.clientWidth / wrap.clientHeight;
+  camera.updateProjectionMatrix();
+}
+
+/* ── 키보드 이벤트 ───────────────────────────────────── */
+
+window.addEventListener('keydown', e => {
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+  if (e.code === 'Space') { e.preventDefault(); handleTalkKey(); return; }
+  if (keys.hasOwnProperty(e.key)) keys[e.key] = true;
+  if (e.key === 'w') keys.w = true;
+  if (e.key === 'a') keys.a = true;
+  if (e.key === 's') keys.s = true;
+  if (e.key === 'd') keys.d = true;
+});
+window.addEventListener('keyup', e => {
+  if (keys.hasOwnProperty(e.key)) keys[e.key] = false;
+  if (e.key === 'w') keys.w = false;
+  if (e.key === 'a') keys.a = false;
+  if (e.key === 's') keys.s = false;
+  if (e.key === 'd') keys.d = false;
+});
+
+function handleTalkKey() {
+  if (isDialogOpen) return;
+  if (nearbyNpcId) openDialog(nearbyNpcId);
+}
+
+/* ── 모바일 조이스틱 ─────────────────────────────────── */
+
+(function setupJoystick() {
+  const base   = document.getElementById('joystick-base');
+  const thumb  = document.getElementById('joystick-thumb');
+  let dragging = false;
+
+  base.addEventListener('touchstart', e => { dragging = true; updateJ(e.touches[0]); }, { passive: true });
+  window.addEventListener('touchmove', e => { if (dragging) updateJ(e.touches[0]); }, { passive: true });
+  window.addEventListener('touchend', () => {
+    if (!dragging) return;
+    dragging = false;
+    thumb.style.left = '50%'; thumb.style.top = '50%';
+    keys.w = keys.a = keys.s = keys.d = false;
+  });
+
+  function updateJ(touch) {
+    const r     = base.getBoundingClientRect();
+    const cx    = r.left + r.width / 2;
+    const cy    = r.top  + r.height / 2;
+    let dx = touch.clientX - cx;
+    let dy = touch.clientY - cy;
+    const max = r.width / 2;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist > max) { dx = dx/dist*max; dy = dy/dist*max; }
+    thumb.style.left = `${50 + (dx/r.width)*100}%`;
+    thumb.style.top  = `${50 + (dy/r.height)*100}%`;
+    const thr = 12;
+    keys.a = dx < -thr; keys.d = dx > thr;
+    keys.w = dy < -thr; keys.s = dy > thr;
+  }
+})();
+
+document.getElementById('mobile-talk').addEventListener('touchstart', () => handleTalkKey());
+
+// ================================================================
+// 5. NPC 목록 UI
+// ================================================================
+let npcCache = []; // 로컬 캐시
+
+async function loadNPCs() {
+  try {
+    const data = await apiCall('getNPCs');
+    npcCache = data.npcs || [];
+    renderNPCList();
+    npcCache.forEach(spawnNPC);
+  } catch (e) {
+    toast('NPC 로드 실패: ' + e.message);
+  }
+}
+
+function renderNPCList() {
+  const list  = document.getElementById('npc-list');
+  const empty = document.getElementById('npc-empty');
+
+  // 기존 카드 제거
+  list.querySelectorAll('.npc-card').forEach(el => el.remove());
+
+  if (npcCache.length === 0) {
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  npcCache.forEach(npc => {
+    const card = document.createElement('div');
+    card.className = 'npc-card';
+    card.innerHTML = `
+      <div class="npc-dot" style="background:${npc.outfitColor};"></div>
+      <div class="npc-info">
+        <div class="npc-name">${npc.name || '이름 없음'}</div>
+        <div class="npc-meta">위치 (${npc.posX.toFixed(1)}, ${npc.posZ.toFixed(1)})</div>
+      </div>
+      <button class="npc-del" data-id="${npc.npcId}" title="삭제">×</button>
+    `;
+    // 카드 클릭 → 플레이어 순간이동
+    card.addEventListener('click', e => {
+      if (e.target.classList.contains('npc-del')) return;
+      playerMesh.position.set(npc.posX, 1, npc.posZ + 4);
+      toast(`📍 ${npc.name || 'NPC'} 위치로 이동했습니다`);
+    });
+    card.querySelector('.npc-del').addEventListener('click', () => {
+      // 클라이언트 측 즉시 제거 (GAS 삭제 액션은 구현 계획 Phase 확장 기능)
+      npcCache = npcCache.filter(n => n.npcId !== npc.npcId);
+      removeNPCMesh(npc.npcId);
+      renderNPCList();
+      toast('🗑 NPC가 목록에서 제거되었습니다 (서버 반영은 교사 확인 필요)');
+    });
+    list.appendChild(card);
+  });
+}
+
+// ================================================================
+// 6. NPC 등록 모달
+// ================================================================
+function openNPCModal() {
+  document.getElementById('npc-modal-bg').classList.remove('hidden');
+  document.getElementById('npc-form-msg').textContent = '';
+}
+function closeNPCModal() {
+  document.getElementById('npc-modal-bg').classList.add('hidden');
+}
+
+document.getElementById('btn-npc-modal').addEventListener('click', openNPCModal);
+document.getElementById('btn-npc-modal-2').addEventListener('click', openNPCModal);
+document.getElementById('btn-close-npc').addEventListener('click', closeNPCModal);
+document.getElementById('btn-cancel-npc').addEventListener('click', closeNPCModal);
+
+document.getElementById('btn-submit-npc').addEventListener('click', async () => {
+  const name      = document.getElementById('npc-name').value.trim();
+  const role      = document.getElementById('npc-role').value.trim();
+  const faceColor = document.getElementById('npc-face').value;
+  const outfit    = document.getElementById('npc-outfit').value;
+  const dlgText   = document.getElementById('npc-dialogues').value.trim();
+  const msgEl     = document.getElementById('npc-form-msg');
+
+  if (!name || !role || !dlgText) {
+    msgEl.textContent = '이름, 소개, 대사를 모두 입력해주세요.';
+    return;
+  }
+
+  const dialogues = dlgText.split('\n').map(l => l.trim()).filter(l => l);
+  if (dialogues.length === 0) {
+    msgEl.textContent = '대화 대사를 한 줄 이상 입력해주세요.';
+    return;
+  }
+
+  // NPC 배치 좌표: 플레이어 근처 랜덤 오프셋
+  const posX = +(playerMesh.position.x + (Math.random() - 0.5) * 8).toFixed(1);
+  const posZ = +(playerMesh.position.z + (Math.random() - 0.5) * 8).toFixed(1);
+
+  const btn = document.getElementById('btn-submit-npc');
+  btn.disabled = true;
+  btn.textContent = '등록 중...';
+  msgEl.textContent = '';
+
+  try {
+    const result = await apiCall('createNPC', {
+      userId:      currentUser.userId,
+      name, faceColor,
+      outfitColor: outfit,
+      dialogues,
+      posX, posZ
+    });
+
+    setGold(result.currentGold);
+    toast(`🎉 ${name} 등록 완료! +${result.reward}G 획득!`);
+    closeNPCModal();
+    await loadNPCs();
+
+    // 폼 초기화
+    document.getElementById('npc-name').value      = '';
+    document.getElementById('npc-role').value      = '';
+    document.getElementById('npc-dialogues').value = '';
+  } catch (e) {
+    msgEl.textContent = e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '등록 완료 ✅';
+  }
+});
+
+// ================================================================
+// 7. 대화 모달
+// ================================================================
+async function openDialog(npcId) {
+  isDialogOpen = true;
+
+  const dlgBg = document.getElementById('dialog-modal');
+  dlgBg.classList.remove('hidden');
+  document.getElementById('dlg-text').textContent = '대화를 불러오는 중...';
+  document.getElementById('dlg-reward').style.display = 'none';
+
+  try {
+    const result = await apiCall('interact', {
+      userId: currentUser.userId,
+      npcId
+    });
+
+    document.getElementById('dlg-face').style.background   = result.faceColor;
+    document.getElementById('dlg-name').textContent        = result.npcName;
+    document.getElementById('dlg-role').textContent        = '';
+    document.getElementById('dlg-text').textContent        = result.text;
+    document.getElementById('dlg-reward-amt').textContent  = result.reward;
+    document.getElementById('dlg-reward').style.display    = 'inline-flex';
+
+    setGold(result.currentGold);
+  } catch (e) {
+    document.getElementById('dlg-text').textContent = '대화를 불러오지 못했습니다: ' + e.message;
+  }
+}
+
+document.getElementById('btn-close-dialog').addEventListener('click', () => {
+  document.getElementById('dialog-modal').classList.add('hidden');
+  isDialogOpen = false;
+});
+
+// ================================================================
+// 8. 로그인 / 회원가입
+// ================================================================
+const tabLogin    = document.getElementById('tab-login');
+const tabRegister = document.getElementById('tab-register');
+const formLogin   = document.getElementById('form-login');
+const formRegister = document.getElementById('form-register');
+
+tabLogin.addEventListener('click', () => {
+  tabLogin.classList.add('active'); tabRegister.classList.remove('active');
+  formLogin.classList.remove('hidden'); formRegister.classList.add('hidden');
+});
+tabRegister.addEventListener('click', () => {
+  tabRegister.classList.add('active'); tabLogin.classList.remove('active');
+  formRegister.classList.remove('hidden'); formLogin.classList.add('hidden');
+});
+
+document.getElementById('btn-register').addEventListener('click', async () => {
+  const userId   = document.getElementById('in-reg-id').value.trim();
+  const password = document.getElementById('in-reg-pw').value;
+  const msgEl    = document.getElementById('reg-msg');
+
+  if (!userId || !password) { msgEl.textContent = '아이디와 비밀번호를 입력해주세요.'; return; }
+  if (userId.length < 2)     { msgEl.textContent = '아이디는 2자 이상이어야 합니다.'; return; }
+
+  const btn = document.getElementById('btn-register');
+  btn.disabled = true; btn.textContent = '처리 중...';
+  msgEl.textContent = '';
+
+  try {
+    await apiCall('register', { userId, password });
+    msgEl.style.color = 'var(--primary)';
+    msgEl.textContent = '가입 완료! 로그인해주세요.';
+    tabLogin.click();
+  } catch (e) {
+    msgEl.style.color = 'var(--danger)';
+    msgEl.textContent = e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = '가입 완료 ✅';
+  }
+});
+
+document.getElementById('btn-login').addEventListener('click', async () => {
+  const userId   = document.getElementById('in-login-id').value.trim();
+  const password = document.getElementById('in-login-pw').value;
+  const msgEl    = document.getElementById('login-msg');
+
+  if (!userId || !password) { msgEl.textContent = '아이디와 비밀번호를 입력해주세요.'; return; }
+
+  const btn = document.getElementById('btn-login');
+  btn.disabled = true; btn.textContent = '접속 중...';
+  msgEl.textContent = '';
+
+  try {
+    const data = await apiCall('login', { userId, password });
+    currentUser = { userId, gold: data.gold };
+
+    // UI 전환
+    document.getElementById('login-overlay').style.opacity = 0;
+    setTimeout(() => {
+      document.getElementById('login-overlay').classList.add('hidden');
+      document.getElementById('app').classList.remove('hidden');
+    }, 400);
+
+    document.getElementById('hud-user').textContent = userId;
+    document.getElementById('hud-gold').textContent  = data.gold;
+
+    // Three.js 초기화 & NPC 로드
+    initThreeJS();
+    await loadNPCs();
+    toast(`🎉 ${userId}님, 환영합니다!`);
+  } catch (e) {
+    msgEl.textContent = e.message;
+    btn.disabled = false; btn.textContent = '마을 입장 🚶';
+  }
+});
+
+// Enter 키 → 로그인
+['in-login-id', 'in-login-pw'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('btn-login').click();
+  });
+});
+
+// ================================================================
+// 9. 새로고침 & 로그아웃
+// ================================================================
+document.getElementById('btn-refresh-npcs').addEventListener('click', async () => {
+  await loadNPCs();
+  toast('🔄 NPC 목록을 갱신했습니다');
+});
+
+document.getElementById('btn-logout').addEventListener('click', () => {
+  if (!confirm('로그아웃 하시겠습니까?')) return;
+  location.reload();
+});
+</script>
+</body>
+</html>
